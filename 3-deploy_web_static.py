@@ -1,56 +1,51 @@
 #!/usr/bin/python3
-""" Creates and distributes an archive to web servers,
-using created function deploy and pack"""
+"""
+file to practice use of Fabric
+"""
+import os.path
 from fabric.api import *
-import os
-do_pack = __import__('1-pack_web_static').do_pack
-
+from fabric.operations import run, put, sudo
+import time
 env.hosts = ['54.197.73.191', '54.88.117.118']
 
 
-def deploy():
-    """Pack and deploy all file """
-    file_path = do_pack()
-    if not file_path:
-        return False
-
-    cmd_exe = do_deploy(file_path)
-    return cmd_exe
+def do_pack():
+    timestr = time.strftime("%Y%m%d%H%M%S")
+    try:
+        local("mkdir -p versions")
+        local("tar -cvzf versions/web_static_{}.tgz web_static/".
+              format(timestr))
+        return ("versions/web_static_{}.tgz".format(timestr))
+    except:
+        return None
 
 
 def do_deploy(archive_path):
-    """Archive distributor"""
+    """ deploy """
+    if (os.path.isfile(archive_path) is False):
+        return False
+
     try:
-        try:
-            if os.path.exists(archive_path):
-                arc_tgz = archive_path.split("/")
-                arg_save = arc_tgz[1]
-                arc_tgz = arc_tgz[1].split('.')
-                arc_tgz = arc_tgz[0]
+        new_comp = archive_path.split("/")[-1]
+        new_folder = ("/data/web_static/releases/" + new_comp.split(".")[0])
+        put(archive_path, "/tmp/")
+        run("sudo mkdir -p {}".format(new_folder))
+        run("sudo tar -xzf /tmp/{} -C {}".
+            format(new_comp, new_folder))
+        run("sudo rm /tmp/{}".format(new_comp))
+        run("sudo mv {}/web_static/* {}/".format(new_folder, new_folder))
+        run("sudo rm -rf {}/web_static".format(new_folder))
+        run('sudo rm -rf /data/web_static/current')
+        run("sudo ln -s {} /data/web_static/current".format(new_folder))
+        return True
+    except:
+        return False
 
-                """Upload archive to the server"""
-                put(archive_path, '/tmp')
 
-                """Save folder paths in variables"""
-                uncomp_fold = '/data/web_static/releases/{}'.format(arc_tgz)
-                tmp_location = '/tmp/{}'.format(arg_save)
-
-                """Run remote commands on the server"""
-                run('mkdir -p {}'.format(uncomp_fold))
-                run('tar -xvzf {} -C {}'.format(tmp_location, uncomp_fold))
-                run('rm {}'.format(tmp_location))
-                run('mv {}/web_static/* {}'.format(uncomp_fold, uncomp_fold))
-                run('rm -rf {}/web_static'.format(uncomp_fold))
-                run('rm -rf /data/web_static/current')
-                run('ln -sf {} /data/web_static/current'.format(uncomp_fold))
-                run('sudo service nginx restart')
-                return True
-            else:
-                print('File does not exist')
-                return False
-        except Exception as err:
-            print(err)
-            return False
-    except Exception:
-        print('Error')
+def deploy():
+    try:
+        archive_address = do_pack()
+        val = do_deploy(archive_address)
+        return val
+    except:
         return False
